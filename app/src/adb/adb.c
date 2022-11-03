@@ -330,6 +330,17 @@ sc_adb_install(struct sc_intr *intr, const char *serial, const char *local,
 }
 
 bool
+sc_adb_uninstall(struct sc_intr *intr, const char *serial, const char *pkg,
+                 unsigned flags) {
+    assert(serial);
+    const char *const argv[] =
+        SC_ADB_COMMAND("-s", serial, "uninstall", pkg);
+
+    sc_pid pid = sc_adb_execute(argv, flags);
+    return process_check_success_intr(intr, pid, "adb uninstall", flags);
+}
+
+bool
 sc_adb_tcpip(struct sc_intr *intr, const char *serial, uint16_t port,
              unsigned flags) {
     char port_string[5 + 1];
@@ -401,6 +412,7 @@ sc_adb_list_devices(struct sc_intr *intr, unsigned flags,
 #define BUFSIZE 65536
     char *buf = malloc(BUFSIZE);
     if (!buf) {
+        LOG_OOM();
         return false;
     }
 
@@ -434,6 +446,7 @@ sc_adb_list_devices(struct sc_intr *intr, unsigned flags,
              "Please report an issue.");
         return false;
     }
+#undef BUFSIZE
 
     // It is parsed as a NUL-terminated string
     buf[r] = '\0';
@@ -710,5 +723,101 @@ sc_adb_get_device_ip(struct sc_intr *intr, const char *serial, unsigned flags) {
     // It is parsed as a NUL-terminated string
     buf[r] = '\0';
 
-    return sc_adb_parse_device_ip_from_output(buf);
+    return sc_adb_parse_device_ip(buf);
+}
+
+char *
+sc_adb_get_installed_apk_path(struct sc_intr *intr, const char *serial,
+                              unsigned flags) {
+    assert(serial);
+    const char *const argv[] =
+        SC_ADB_COMMAND("-s", serial, "shell", "pm", "list", "package", "-f",
+                       SC_ANDROID_PACKAGE);
+
+    sc_pipe pout;
+    sc_pid pid = sc_adb_execute_p(argv, flags, &pout);
+    if (pid == SC_PROCESS_NONE) {
+        LOGD("Could not execute \"pm list packages\"");
+        return NULL;
+    }
+
+    // "pm list packages -f <package>" output should contain only one line, so
+    // the output should be short
+    char buf[1024];
+    ssize_t r = sc_pipe_read_all_intr(intr, pid, pout, buf, sizeof(buf) - 1);
+    sc_pipe_close(pout);
+
+    bool ok = process_check_success_intr(intr, pid, "pm list packages", flags);
+    if (!ok) {
+        return NULL;
+    }
+
+    if (r == -1) {
+        return NULL;
+    }
+
+    assert((size_t) r < sizeof(buf));
+    if (r == sizeof(buf) - 1)  {
+        // The implementation assumes that the output of "pm list packages"
+        // fits in the buffer in a single pass
+        LOGW("Result of \"pm list package\" does not fit in 1Kb. "
+             "Please report an issue.");
+        return NULL;
+    }
+
+    // It is parsed as a NUL-terminated string
+    buf[r] = '\0';
+
+    return sc_adb_parse_installed_apk_path(buf);
+}
+
+char *
+sc_adb_get_installed_apk_version(struct sc_intr *intr, const char *serial,
+                                 unsigned flags) {
+    assert(serial);
+    const char *const argv[] =
+        SC_ADB_COMMAND("-s", serial, "shell", "dumpsys", "package",
+                       SC_ANDROID_PACKAGE);
+
+    sc_pipe pout;
+    sc_pid pid = sc_adb_execute_p(argv, flags, &pout);
+    if (pid == SC_PROCESS_NONE) {
+        LOGD("Could not execute \"dumpsys package\"");
+        return NULL;
+    }
+
+    // "dumpsys package" output can be huge (e.g. 16k), but versionName is at
+    // the beginning, typically in the first 1024 bytes (64k should be enough
+    // for the whole output anyway)
+#define BUFSIZE 65536
+    char *buf = malloc(BUFSIZE);
+    if (!buf) {
+        return false;
+    }
+    ssize_t r = sc_pipe_read_all_intr(intr, pid, pout, buf, BUFSIZE - 1);
+    sc_pipe_close(pout);
+
+    bool ok = process_check_success_intr(intr, pid, "dumpsys package", flags);
+    if (!ok) {
+        free(buf);
+        return NULL;
+    }
+
+    if (r == -1) {
+        free(buf);
+        return NULL;
+    }
+
+    assert((size_t) r < BUFSIZE);
+#undef BUFSIZE
+    // if r == sizeof(buf), then the output is truncated, but we don't care,
+    // versionName is at the beginning in practice, and is unlikely to be
+    // truncated at 64k
+
+    // It is parsed as a NUL-terminated string
+    buf[r] = '\0';
+
+    char *version = sc_adb_parse_installed_apk_version(buf);
+    free(buf);
+    return version;
 }

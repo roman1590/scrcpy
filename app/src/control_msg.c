@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "util/buffer_util.h"
+#include "util/binary.h"
 #include "util/log.h"
 #include "util/str.h"
 
@@ -37,7 +37,7 @@ static const char *const android_motionevent_action_labels[] = {
     "move",
     "cancel",
     "outside",
-    "ponter-down",
+    "pointer-down",
     "pointer-up",
     "hover-move",
     "scroll",
@@ -78,16 +78,6 @@ write_string(const char *utf8, size_t max_len, unsigned char *buf) {
     return 4 + len;
 }
 
-static uint16_t
-to_fixed_point_16(float f) {
-    assert(f >= 0.0f && f <= 1.0f);
-    uint32_t u = f * 0x1p16f; // 2^16
-    if (u >= 0xffff) {
-        u = 0xffff;
-    }
-    return (uint16_t) u;
-}
-
 size_t
 sc_control_msg_serialize(const struct sc_control_msg *msg, unsigned char *buf) {
     buf[0] = msg->type;
@@ -109,18 +99,20 @@ sc_control_msg_serialize(const struct sc_control_msg *msg, unsigned char *buf) {
             sc_write64be(&buf[2], msg->inject_touch_event.pointer_id);
             write_position(&buf[10], &msg->inject_touch_event.position);
             uint16_t pressure =
-                to_fixed_point_16(msg->inject_touch_event.pressure);
+                sc_float_to_u16fp(msg->inject_touch_event.pressure);
             sc_write16be(&buf[22], pressure);
             sc_write32be(&buf[24], msg->inject_touch_event.buttons);
             return 28;
         case SC_CONTROL_MSG_TYPE_INJECT_SCROLL_EVENT:
             write_position(&buf[1], &msg->inject_scroll_event.position);
-            sc_write32be(&buf[13],
-                             (uint32_t) msg->inject_scroll_event.hscroll);
-            sc_write32be(&buf[17],
-                             (uint32_t) msg->inject_scroll_event.vscroll);
-            sc_write32be(&buf[21], msg->inject_scroll_event.buttons);
-            return 25;
+            int16_t hscroll =
+                sc_float_to_i16fp(msg->inject_scroll_event.hscroll);
+            int16_t vscroll =
+                sc_float_to_i16fp(msg->inject_scroll_event.vscroll);
+            sc_write16be(&buf[13], (uint16_t) hscroll);
+            sc_write16be(&buf[15], (uint16_t) vscroll);
+            sc_write32be(&buf[17], msg->inject_scroll_event.buttons);
+            return 21;
         case SC_CONTROL_MSG_TYPE_BACK_OR_SCREEN_ON:
             buf[1] = msg->inject_keycode.action;
             return 2;
@@ -170,7 +162,7 @@ sc_control_msg_log(const struct sc_control_msg *msg) {
             if (id == POINTER_ID_MOUSE || id == POINTER_ID_VIRTUAL_FINGER) {
                 // string pointer id
                 LOG_CMSG("touch [id=%s] %-4s position=%" PRIi32 ",%" PRIi32
-                             " pressure=%g buttons=%06lx",
+                             " pressure=%f buttons=%06lx",
                          id == POINTER_ID_MOUSE ? "mouse" : "vfinger",
                          MOTIONEVENT_ACTION_LABEL(action),
                          msg->inject_touch_event.position.point.x,
@@ -180,7 +172,7 @@ sc_control_msg_log(const struct sc_control_msg *msg) {
             } else {
                 // numeric pointer id
                 LOG_CMSG("touch [id=%" PRIu64_ "] %-4s position=%" PRIi32 ",%"
-                             PRIi32 " pressure=%g buttons=%06lx",
+                             PRIi32 " pressure=%f buttons=%06lx",
                          id,
                          MOTIONEVENT_ACTION_LABEL(action),
                          msg->inject_touch_event.position.point.x,
@@ -191,8 +183,8 @@ sc_control_msg_log(const struct sc_control_msg *msg) {
             break;
         }
         case SC_CONTROL_MSG_TYPE_INJECT_SCROLL_EVENT:
-            LOG_CMSG("scroll position=%" PRIi32 ",%" PRIi32 " hscroll=%" PRIi32
-                         " vscroll=%" PRIi32 " buttons=%06lx",
+            LOG_CMSG("scroll position=%" PRIi32 ",%" PRIi32 " hscroll=%f"
+                         " vscroll=%f buttons=%06lx",
                      msg->inject_scroll_event.position.point.x,
                      msg->inject_scroll_event.position.point.y,
                      msg->inject_scroll_event.hscroll,

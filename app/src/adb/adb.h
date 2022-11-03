@@ -15,6 +15,8 @@
 
 #define SC_ADB_SILENT (SC_ADB_NO_STDOUT | SC_ADB_NO_STDERR | SC_ADB_NO_LOGERR)
 
+#define SC_ANDROID_PACKAGE "com.genymobile.scrcpy"
+
 const char *
 sc_adb_get_executable(void);
 
@@ -63,6 +65,10 @@ sc_adb_push(struct sc_intr *intr, const char *serial, const char *local,
 bool
 sc_adb_install(struct sc_intr *intr, const char *serial, const char *local,
                unsigned flags);
+
+bool
+sc_adb_uninstall(struct sc_intr *intr, const char *serial, const char *pkg,
+                 unsigned flags);
 
 /**
  * Execute `adb tcpip <port>`
@@ -113,5 +119,19 @@ sc_adb_getprop(struct sc_intr *intr, const char *serial, const char *prop,
  */
 char *
 sc_adb_get_device_ip(struct sc_intr *intr, const char *serial, unsigned flags);
+
+/**
+ * Return the path of the installed APK for com.genymobile.scrcpy (if any)
+ */
+char *
+sc_adb_get_installed_apk_path(struct sc_intr *intr, const char *serial,
+                              unsigned flags);
+
+/**
+ * Return the version of the installed APK for com.genymobile.scrcpy (if any)
+ */
+char *
+sc_adb_get_installed_apk_version(struct sc_intr *intr, const char *serial,
+                                 unsigned flags);
 
 #endif

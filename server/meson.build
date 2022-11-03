@@ -6,19 +6,19 @@ if prebuilt_server == ''
                   # gradle is responsible for tracking source changes
                   build_by_default: true,
                   build_always_stale: true,
-                  output: 'scrcpy-server',
+                  output: 'scrcpy-server.apk',
                   command: [find_program('./scripts/build-wrapper.sh'), meson.current_source_dir(), '@OUTPUT@', get_option('buildtype')],
                   console: true,
                   install: true,
                   install_dir: 'share/scrcpy')
 else
     if not prebuilt_server.startswith('/')
-        # relative path needs some trick
-        prebuilt_server = meson.source_root() + '/' + prebuilt_server
+        # prebuilt server path is relative to the root scrcpy directory
+        prebuilt_server = '../' + prebuilt_server
     endif
     custom_target('scrcpy-server-prebuilt',
                   input: prebuilt_server,
-                  output: 'scrcpy-server',
+                  output: 'scrcpy-server.apk',
                   command: ['cp', '@INPUT@', '@OUTPUT@'],
                   install: true,
                   install_dir: 'share/scrcpy')

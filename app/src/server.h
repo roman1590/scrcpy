@@ -48,6 +48,8 @@ struct sc_server_params {
     bool select_tcpip;
     bool cleanup;
     bool power_on;
+    bool install;
+    bool reinstall;
 };
 
 struct sc_server {

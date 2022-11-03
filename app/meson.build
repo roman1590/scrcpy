@@ -188,7 +188,7 @@ conf.set_quoted('SCRCPY_VERSION', meson.project_version())
 # the prefix used during configuration (meson --prefix=PREFIX)
 conf.set_quoted('PREFIX', get_option('prefix'))
 
-# build a "portable" version (with scrcpy-server accessible from the same
+# build a "portable" version (with scrcpy-server.apk accessible from the same
 # directory as the executable)
 conf.set('PORTABLE', get_option('portable'))
 
@@ -223,14 +223,26 @@ executable('scrcpy', src,
            install: true,
            c_args: [])
 
+# <https://mesonbuild.com/Builtin-options.html#directories>
+datadir = get_option('datadir') # by default 'share'
+
 install_man('scrcpy.1')
 install_data('data/icon.png',
              rename: 'scrcpy.png',
-             install_dir: 'share/icons/hicolor/256x256/apps')
+             install_dir: join_paths(datadir, 'icons/hicolor/256x256/apps'))
 install_data('data/zsh-completion/_scrcpy',
-             install_dir: 'share/zsh/site-functions')
+             install_dir: join_paths(datadir, 'zsh/site-functions'))
 install_data('data/bash-completion/scrcpy',
-             install_dir: 'share/bash-completion/completions')
+             install_dir: join_paths(datadir, 'bash-completion/completions'))
+
+# Desktop entry file for application launchers
+if host_machine.system() == 'linux'
+    # Install a launcher (ex: /usr/local/share/applications/scrcpy.desktop)
+    install_data('data/scrcpy.desktop',
+                 install_dir: join_paths(datadir, 'applications'))
+    install_data('data/scrcpy-console.desktop',
+                 install_dir: join_paths(datadir, 'applications'))
+endif
 
 
 ### TESTS
@@ -245,8 +257,8 @@ if get_option('buildtype') == 'debug'
             'src/util/str.c',
             'src/util/strbuf.c',
         ]],
-        ['test_buffer_util', [
-            'tests/test_buffer_util.c',
+        ['test_binary', [
+            'tests/test_binary.c',
         ]],
         ['test_cbuf', [
             'tests/test_cbuf.c',

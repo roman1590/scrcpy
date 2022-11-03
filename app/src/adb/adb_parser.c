@@ -199,7 +199,7 @@ sc_adb_parse_device_ip_from_line(char *line) {
 }
 
 char *
-sc_adb_parse_device_ip_from_output(char *str) {
+sc_adb_parse_device_ip(char *str) {
     size_t idx_line = 0;
     while (str[idx_line] != '\0') {
         char *line = &str[idx_line];
@@ -224,4 +224,63 @@ sc_adb_parse_device_ip_from_output(char *str) {
     }
 
     return NULL;
+}
+
+char *
+sc_adb_parse_installed_apk_path(char *str) {
+    // str is expected to look like:
+    // "package:/data/app/.../base.apk=com.genymobile.scrcpy"
+    //          ^^^^^^^^^^^^^^^^^^^^^^
+    // We want to extract the path (which may contain '=', even in practice)
+
+    if (strncmp(str, "package:", 8)) {
+        // Does not start with "package:"
+        return NULL;
+    }
+
+    char *s = str + 8;
+    size_t len = strcspn(s, " \r\n");
+    s[len] = '\0';
+
+    char *p = strrchr(s, '=');
+    if (!p) {
+        // No '=' found
+        return NULL;
+    }
+
+    // Truncate at the last '='
+    *p = '\0';
+
+    return strdup(s);
+}
+
+char *
+sc_adb_parse_installed_apk_version(const char *str) {
+    // str is the (beginning of the) output of `dumpsys package`
+    // We want to extract the version string from a line starting with 4 spaces
+    // then `versionName=` then the version string.
+
+#define VERSION_NAME_PREFIX "\n    versionName="
+    char *s = strstr(str, VERSION_NAME_PREFIX);
+    if (!s) {
+        // Not found
+        return NULL;
+    }
+
+    s+= sizeof(VERSION_NAME_PREFIX) - 1;
+
+    size_t len = strspn(s, "0123456789.");
+    if (!len) {
+        LOGW("Unexpected version name with no value");
+        return NULL;
+    }
+
+    char *version = malloc(len + 1);
+    if (!version) {
+        return NULL;
+    }
+
+    memcpy(version, s, len);
+    version[len] = '\0';
+    return version;
 }
